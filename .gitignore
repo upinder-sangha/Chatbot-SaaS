@@ -11,3 +11,13 @@ __pycache__/
 # Other common ignores
 .DS_Store
 *.log
+
+.env
+
+# IDE files
+.vscode/
+.idea/
+.cursorrules
+
+# Other files
+.cursorrules
