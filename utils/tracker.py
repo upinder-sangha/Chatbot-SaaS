@@ -6,12 +6,12 @@ from threading import Lock
 TRACKING_FILE = "db/user_records.json"
 lock = Lock()
 
-
-def log_upload(email, bot_id, filename):
+def log_upload(email, bot_id, filename, name):
     data = {
         "email": email,
         "bot_id": bot_id,
         "filename": filename,
+        "name": name,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

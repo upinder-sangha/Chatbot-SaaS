@@ -1,9 +1,10 @@
 import os
 import uuid
-from openai import OpenAI
-from qdrant_client import QdrantClient
-from qdrant_client.http import models as qdrant_models
 from dotenv import load_dotenv
+from langchain_openai import OpenAIEmbeddings
+from langchain_qdrant import QdrantVectorStore
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from config import EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP, COLLECTION_NAME
 
 load_dotenv()
 
@@ -11,46 +12,30 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
-qdrant_client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY,
-)
-
-COLLECTION_NAME = "bots"
-
-async def store_embedding(text: str, email: str) -> str:
+async def store_embedding(text: str, email: str, name: str) -> str:
     # Generate a unique bot_id
     bot_id = str(uuid.uuid4())
 
-    # Split into chunks if too long (simple for now)
-    chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
+    # Initialize text splitter
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP, length_function=len
+    )
 
-    vectors = []
-    for chunk in chunks:
-        response = openai_client.embeddings.create(
-            input=chunk,
-            model="text-embedding-ada-002"
-        )
-        embedding = response.data[0].embedding
+    # Split text into chunks
+    chunks = text_splitter.split_text(text)
 
-        vectors.append(
-            qdrant_models.PointStruct(
-                id=str(uuid.uuid4()),
-                vector=embedding,
-                payload={
-                    "bot_id": bot_id,
-                    "email": email,
-                    "text": chunk
-                }
-            )
-        )
+    # Initialize LangChain embeddings
+    embeddings = OpenAIEmbeddings(api_key=OPENAI_API_KEY, model=EMBEDDING_MODEL)
 
-    # Upsert into Qdrant
-    qdrant_client.upsert(
+    # Create Qdrant vector store
+    vectorstore = QdrantVectorStore.from_texts(
+        texts=chunks,
+        embedding=embeddings,
+        metadatas=[{"bot_id": bot_id, "email": email, "name": name} for _ in chunks],
+        ids=[str(uuid.uuid4()) for _ in chunks],
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
         collection_name=COLLECTION_NAME,
-        points=vectors
     )
 
     return bot_id
