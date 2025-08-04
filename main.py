@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from utils.parser import parse_file
 from utils.embedding import store_embedding
-from utils.emailer import send_embed_script_email
+from utils.emailer import send_embed_script_email, generate_script_tag
 from utils.tracker import log_upload
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_qdrant import QdrantVectorStore
@@ -69,6 +69,9 @@ async def upload_doc(file: UploadFile, email: str = Form(...), name: str = Form(
     bot_id = await store_embedding(text, email, name)
     log_upload(email, bot_id, file.filename, name)
 
+    # Generate script tag using emailer.py function
+    script_tag = generate_script_tag(bot_id, name)
+
     try:
         send_embed_script_email(email, bot_id, name)
     except Exception as e:
@@ -79,6 +82,7 @@ async def upload_doc(file: UploadFile, email: str = Form(...), name: str = Form(
         "email": email,
         "bot_id": bot_id,
         "name": name,
+        "script_tag": script_tag,
         "message": "Embedding stored successfully and email sent"
     })
 
@@ -125,7 +129,7 @@ async def chat(request: ChatRequest):
         # Define prompt template
         prompt_template = PromptTemplate(
             input_variables=["context", "history", "question"],
-            template="""Pretend to be the optimistic owner of the content you are answering questions about. Use the following context to answer the user's question concisely and accurately. You can be a bit creative about the details but make sure they align with the context. If the context doesn't contain relevant information, use the conversation history (if provided) to provide context for follow-up questions or say so politely. For questions that can be answered without the context, answer them as positively as possible.
+            template="""You are Docative, an AI chatbot created from the user's content, representing him, his documents, website, or portfolio. Use the provided context to answer questions concisely and accurately, reflecting the tone and intent of the content (e.g., professional for resumes, engaging for websites). Be creative with details as long as they align with the context. If the context lacks relevant information, use conversation history (if available) to inform follow-ups or politely say, "I don’t have enough info from your content to answer that, but feel free to ask something related!" For questions unrelated to the context, respond positively with general knowledge or encouragement, keeping it relevant to person's goals.
 
 Context: {context}
 
