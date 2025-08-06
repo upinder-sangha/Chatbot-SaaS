@@ -232,6 +232,7 @@ export class YourComponent implements OnInit {{
         <div class="footer">
             <p>© {datetime.now().year} Docative. All rights reserved.</p>
             <p>This email was sent to {safe_to_email}</p>
+            <p>This is an automated message, please do not reply to this email.</p>
         </div>
     </body>
     </html>

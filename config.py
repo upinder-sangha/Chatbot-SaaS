@@ -14,4 +14,4 @@ LLM_MAX_TOKENS = 1000
 TOP_K_CHUNKS = 5
 
 # Qdrant
-COLLECTION_NAME = "bots"
+COLLECTION_NAME = "docative"
