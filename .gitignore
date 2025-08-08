@@ -21,3 +21,5 @@ __pycache__/
 
 # Other files
 .cursorrules
+
+docative-ec2-key.pem

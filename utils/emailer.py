@@ -1,11 +1,14 @@
 import os
 import smtplib
 import html
+import json
 from email.message import EmailMessage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from dotenv import load_dotenv
 from datetime import datetime
+
 load_dotenv()
 
 SMTP_HOST = os.getenv("SMTP_HOST")
@@ -14,9 +17,11 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 
+
 def generate_script_tag(bot_id: str, name: str) -> str:
     """Generate the script tag for embedding the chatbot."""
     return f'<script src="https://www.upindersangha.com/docative-widget.js" data-bot-id="{bot_id}" data-name="{name}"></script>'
+
 
 def send_embed_script_email(to_email: str, bot_id: str, name: str) -> None:
     """Send an email with the chatbot embed script tag."""
@@ -26,7 +31,7 @@ def send_embed_script_email(to_email: str, bot_id: str, name: str) -> None:
     script_tag = generate_script_tag(bot_id, name)
     safe_script_tag = html.escape(script_tag)  # Escape for HTML rendering
     # Create multipart/alternative email
-    msg = MIMEMultipart('alternative')
+    msg = MIMEMultipart("alternative")
     msg["Subject"] = "Your Docative Chatbot is Ready! 🚀"
     msg["From"] = SENDER_EMAIL
     msg["To"] = to_email
@@ -335,8 +340,8 @@ The Docative Team
 https://www.upindersangha.com/docative
     """
     # Attach HTML and plain text parts
-    msg.attach(MIMEText(plain_text_content, 'plain'))
-    msg.attach(MIMEText(html_content, 'html'))
+    msg.attach(MIMEText(plain_text_content, "plain"))
+    msg.attach(MIMEText(html_content, "html"))
     # Send email with error handling
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
@@ -344,3 +349,150 @@ https://www.upindersangha.com/docative
             smtp.send_message(msg)
     except smtplib.SMTPException as e:
         raise Exception(f"Failed to send email: {str(e)}") from e
+
+
+def send_admin_notification(
+    new_user_email: str, new_user_name: str, bot_id: str, filename: str
+) -> None:
+    """Send a notification email to admin with new user details and user_records.json."""
+    # Create multipart/alternative email
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"New Docative User: {new_user_name}"
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = SENDER_EMAIL
+    msg["Reply-To"] = SENDER_EMAIL
+    msg["MIME-Version"] = "1.0"
+
+    # HTML content
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Docative User</title>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 30px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+            }}
+            .content {{
+                background-color: #f9f9f9;
+                border-radius: 10px;
+                padding: 25px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            }}
+            .user-details {{
+                background-color: #e8f4fd;
+                border-left: 4px solid #667eea;
+                padding: 15px;
+                margin: 15px 0;
+                border-radius: 5px;
+            }}
+            .footer {{
+                text-align: center;
+                margin-top: 30px;
+                font-size: 12px;
+                color: #888;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🎉 New Docative User</h1>
+            <p>A new user has signed up for Docative!</p>
+        </div>
+        
+        <div class="content">
+            <h2>User Details</h2>
+            <div class="user-details">
+                <p><strong>Name:</strong> {html.escape(new_user_name)}</p>
+                <p><strong>Email:</strong> {html.escape(new_user_email)}</p>
+                <p><strong>Bot ID:</strong> {html.escape(bot_id)}</p>
+                <p><strong>Uploaded File:</strong> {html.escape(filename)}</p>
+                <p><strong>Timestamp:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+            </div>
+            
+            <p>This user has successfully uploaded a document and received their chatbot embed script.</p>
+            
+            <p>The complete user_records.json file is attached to this email for your reference.</p>
+        </div>
+        
+        <div class="footer">
+            <p>© {datetime.now().year} Docative. All rights reserved.</p>
+            <p>This is an automated notification from the Docative system.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Plain text content
+    plain_text_content = f"""
+New Docative User Notification
+
+A new user has signed up for Docative!
+
+User Details:
+- Name: {new_user_name}
+- Email: {new_user_email}
+- Bot ID: {bot_id}
+- Uploaded File: {filename}
+- Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+This user has successfully uploaded a document and received their chatbot embed script.
+
+The complete user_records.json file is attached to this email for your reference.
+
+Best regards,
+Docative System
+    """
+
+    # Create a new multipart message for attachments
+    msg_with_attachment = MIMEMultipart()
+    msg_with_attachment["Subject"] = msg["Subject"]
+    msg_with_attachment["From"] = msg["From"]
+    msg_with_attachment["To"] = msg["To"]
+    msg_with_attachment["Reply-To"] = msg["Reply-To"]
+    msg_with_attachment["MIME-Version"] = msg["MIME-Version"]
+
+    # Attach the alternative content (HTML and plain text)
+    msg_with_attachment.attach(msg)
+
+    # Attach user_records.json file
+    try:
+        with open("db/user_records.json", "r") as f:
+            user_records_data = f.read()
+
+        attachment = MIMEApplication(user_records_data, _subtype="json")
+        attachment.add_header(
+            "Content-Disposition", "attachment", filename="user_records.json"
+        )
+        msg_with_attachment.attach(attachment)
+    except Exception as e:
+        # If we can't read the file, just log it and continue
+        print(f"Warning: Could not attach user_records.json: {str(e)}")
+
+    # Attach HTML and plain text parts to the alternative message
+    msg.attach(MIMEText(plain_text_content, "plain"))
+    msg.attach(MIMEText(html_content, "html"))
+
+    # Send email with error handling
+    try:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as smtp:
+            smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.send_message(msg_with_attachment)
+    except smtplib.SMTPException as e:
+        raise Exception(f"Failed to send admin notification email: {str(e)}") from e

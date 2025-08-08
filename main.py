@@ -5,7 +5,11 @@ from pydantic import BaseModel
 from typing import Optional
 from utils.parser import parse_file
 from utils.embedding import store_embedding
-from utils.emailer import send_embed_script_email, generate_script_tag
+from utils.emailer import (
+    send_embed_script_email,
+    generate_script_tag,
+    send_admin_notification,
+)
 from utils.tracker import log_upload
 from utils.otp import generate_otp, store_otp, verify_otp, is_verified, send_otp_email
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
@@ -212,6 +216,8 @@ async def upload_doc(
 
     try:
         send_embed_script_email(email, bot_id, name)
+        # Send admin notification
+        send_admin_notification(email, name, bot_id, file.filename)
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
