@@ -12,6 +12,7 @@ from utils.emailer import (
 )
 from utils.tracker import log_upload
 from utils.otp import generate_otp, store_otp, verify_otp, is_verified, send_otp_email
+from utils.scraper import scrape_site
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_qdrant import QdrantVectorStore
 from langchain.prompts import PromptTemplate
@@ -147,15 +148,16 @@ async def verify_otp_endpoint(request: OTPRequest):
 
 @app.post("/upload")
 async def upload_doc(
-    file: UploadFile,
+    file: UploadFile = None,  # Make file optional
+    url: str = Form(None),    # Add URL parameter
     email: str = Form(...),
     name: str = Form(...),
-    replace: bool = Form(False),  # Add replace parameter
+    replace: bool = Form(False),
 ):
     logger.info(
         f"Processing upload for email: {email}, name: {name}, replace: {replace}"
     )
-
+    
     # Check if email is verified
     if not is_verified(email):
         logger.warning(f"Email not verified: {email}")
@@ -166,7 +168,20 @@ async def upload_doc(
                 "message": "Please verify your email address first",
             },
         )
-
+    
+    # Validate input - either file or URL must be provided
+    if not file and not url:
+        raise HTTPException(
+            status_code=400, 
+            detail="Either a file or URL must be provided"
+        )
+    
+    if file and url:
+        raise HTTPException(
+            status_code=400, 
+            detail="Provide either a file or a URL, not both"
+        )
+    
     # Check if user has existing bot and replace is not True
     existing_bot_id = await check_existing_bot(email)
     if existing_bot_id and not replace:
@@ -178,7 +193,7 @@ async def upload_doc(
                 "bot_id": existing_bot_id,
             },
         )
-
+    
     # If replace is True and existing bot exists, delete it
     if existing_bot_id and replace:
         embedding = OpenAIEmbeddings(api_key=OPENAI_API_KEY, model=EMBEDDING_MODEL)
@@ -188,8 +203,7 @@ async def upload_doc(
             url=QDRANT_URL,
             api_key=QDRANT_API_KEY,
         )
-
-        # Delete all points with this bot_id using proper Qdrant filter syntax
+        # Delete all points with this bot_id
         vectorstore.client.delete(
             collection_name=COLLECTION_NAME,
             points_selector=Filter(
@@ -201,34 +215,82 @@ async def upload_doc(
             ),
         )
         logger.info(f"Deleted existing bot with bot_id: {existing_bot_id}")
-
-    text = await parse_file(file)
+    
+    # Get text from either file or URL
+    if url:
+        try:
+            text = scrape_site(url)
+            source_type = "URL"
+            source_name = url
+            
+            # Check if scraping returned any content
+            if not text or len(text.strip()) < 10:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Unable to extract content from the provided URL. The website might be empty, blocked, or not accessible."
+                )
+                
+        except Exception as e:
+            logger.error(f"Error scraping URL {url}: {str(e)}")
+            # Provide specific error messages based on the exception
+            if "connection" in str(e).lower() or "resolve" in str(e).lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Unable to connect to the provided URL. Please check if the website is accessible."
+                )
+            elif "timeout" in str(e).lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail="The request to the website timed out. Please try again later."
+                )
+            elif "robots.txt" in str(e).lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail="This website does not allow scraping according to its robots.txt file."
+                )
+            else:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Failed to scrape the website. Please check the URL and try again."
+                )
+    elif file:
+        text = await parse_file(file)
+        source_type = "file"
+        source_name = file.filename
+    else:
+        # This should never happen due to validation above
+        raise HTTPException(
+            status_code=400, 
+            detail="Either a file or URL must be provided"
+        )
+    
     if not text:
         raise HTTPException(
-            status_code=400, detail="Unsupported file type or empty content"
+            status_code=400, 
+            detail=f"Failed to extract text from the provided {source_type}"
         )
-
+    
     bot_id = await store_embedding(text, email, name)
-    log_upload(email, bot_id, file.filename, name)
-
-    # Generate script tag using emailer.py function
+    log_upload(email, bot_id, source_name, name)
+    
+    # Generate script tag
     script_tag = generate_script_tag(bot_id, name)
-
+    
     try:
         send_embed_script_email(email, bot_id, name)
         # Send admin notification
-        send_admin_notification(email, name, bot_id, file.filename)
+        send_admin_notification(email, name, bot_id, source_name)
     except Exception as e:
         logger.error(f"Failed to send email: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
-
+    
     return JSONResponse(
         content={
             "email": email,
             "bot_id": bot_id,
             "name": name,
             "script_tag": script_tag,
-            "message": "Embedding stored successfully and email sent",
+            "message": f"Embedding stored successfully from {source_type} and email sent",
         }
     )
 

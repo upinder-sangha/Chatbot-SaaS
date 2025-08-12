@@ -77,3 +77,4 @@ urllib3
 uvicorn==0.35.0
 yarl
 zstandard
+bs4
